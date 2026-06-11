@@ -39,6 +39,12 @@ export interface Issue {
   material_url?: string;
   batch_name?: string;
   review_comment?: string;
+  road_name?: string;
+  road_type?: string;
+  latitude?: number;
+  longitude?: number;
+  direction?: string;
+  rectification_note?: string;
 }
 
 export interface Review {

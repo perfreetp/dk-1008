@@ -17,6 +17,7 @@ interface AppState {
   createIssue: (issue: Omit<Issue, 'id' | 'created_at' | 'updated_at'>) => void;
   updateIssueStatus: (issueId: string, status: Issue['status']) => void;
   reviewIssue: (issueId: string, result: 'passed' | 'rejected', comment: string) => void;
+  submitRectification: (issueId: string, note: string) => void;
   calculateStatistics: () => void;
 }
 
@@ -150,6 +151,29 @@ export const useAppStore = create<AppState>((set, get) => ({
           status, 
           updated_at: new Date().toISOString(),
           review_comment: comment 
+        } : i
+      );
+      
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        batches: state.batches,
+        materials: state.materials,
+        issues: newIssues,
+        selectedBatchId: state.selectedBatchId,
+      }));
+      
+      return { issues: newIssues };
+    });
+  },
+
+  submitRectification: (issueId, note) => {
+    const reviewingStatus: Issue['status'] = 'reviewing';
+    set(state => {
+      const newIssues = state.issues.map(i =>
+        i.id === issueId ? { 
+          ...i, 
+          status: reviewingStatus,
+          rectification_note: note,
+          updated_at: new Date().toISOString(),
         } : i
       );
       

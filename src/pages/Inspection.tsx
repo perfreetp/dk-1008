@@ -51,6 +51,13 @@ export default function Inspection({ onNavigate }: InspectionProps) {
         type: selectedIssueType,
         description: issueDescription,
         status: 'pending',
+        material_url: currentMaterial.url,
+        batch_name: batch?.name,
+        road_name: batch?.road_name,
+        road_type: batch?.road_type,
+        latitude: currentMaterial.latitude,
+        longitude: currentMaterial.longitude,
+        direction: currentMaterial.direction,
       });
       setShowIssueModal(false);
       setIssueDescription('');

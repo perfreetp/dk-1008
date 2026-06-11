@@ -1,18 +1,22 @@
 import { useState } from 'react';
 import { useAppStore } from '../store';
 import { Issue, ISSUE_TYPE_MAP, STATUS_MAP } from '../types';
-import { Search, Filter, AlertCircle, Clock, CheckCircle, XCircle, Eye } from 'lucide-react';
+import { Search, Filter, AlertCircle, Clock, CheckCircle, XCircle, Eye, Send, MapPin, Navigation } from 'lucide-react';
 
 export default function Issues() {
   const issues = useAppStore(state => state.issues);
+  const submitRectification = useAppStore(state => state.submitRectification);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [issueTypeFilter, setIssueTypeFilter] = useState<string>('all');
   const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null);
+  const [rectificationNote, setRectificationNote] = useState('');
+  const [showRectificationForm, setShowRectificationForm] = useState(false);
 
   const filteredIssues = issues.filter(issue => {
     const matchesSearch = issue.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         issue.batch_name?.toLowerCase().includes(searchTerm.toLowerCase());
+                         issue.batch_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         issue.road_name?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || issue.status === statusFilter;
     const matchesType = issueTypeFilter === 'all' || issue.type === issueTypeFilter;
     return matchesSearch && matchesStatus && matchesType;
@@ -45,7 +49,18 @@ export default function Issues() {
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
     });
+  };
+
+  const handleSubmitRectification = () => {
+    if (selectedIssue && rectificationNote.trim()) {
+      submitRectification(selectedIssue.id, rectificationNote);
+      setShowRectificationForm(false);
+      setRectificationNote('');
+      setSelectedIssue(null);
+    }
   };
 
   const pendingCount = issues.filter(i => i.status === 'pending').length;
@@ -116,7 +131,7 @@ export default function Issues() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
               <input
                 type="text"
-                placeholder="搜索问题描述或批次名称..."
+                placeholder="搜索问题描述、批次名称或道路名称..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
@@ -159,7 +174,11 @@ export default function Issues() {
             filteredIssues.map((issue) => (
               <div
                 key={issue.id}
-                onClick={() => setSelectedIssue(issue)}
+                onClick={() => {
+                  setSelectedIssue(issue);
+                  setShowRectificationForm(false);
+                  setRectificationNote('');
+                }}
                 className="p-4 hover:bg-gray-50 transition-colors cursor-pointer"
               >
                 <div className="flex items-center justify-between">
@@ -175,11 +194,26 @@ export default function Issues() {
                     <p className="mt-2 text-gray-800 font-medium">{issue.description}</p>
                     <div className="flex items-center gap-4 mt-2 text-sm text-gray-500">
                       <span>{issue.batch_name}</span>
+                      <span>{issue.road_name}</span>
                       <span>{formatDate(issue.created_at)}</span>
                     </div>
                   </div>
                   <Eye className="w-5 h-5 text-gray-400" />
                 </div>
+                {issue.rectification_note && (
+                  <div className="mt-3 p-3 bg-primary-50 rounded-lg border border-primary-200">
+                    <p className="text-sm text-primary-700">
+                      <span className="font-medium">整改说明：</span>{issue.rectification_note}
+                    </p>
+                  </div>
+                )}
+                {issue.review_comment && (
+                  <div className={`mt-3 p-3 rounded-lg border ${issue.status === 'resolved' ? 'bg-success-50 border-success-200' : 'bg-danger-50 border-danger-200'}`}>
+                    <p className={`text-sm ${issue.status === 'resolved' ? 'text-success-700' : 'text-danger-700'}`}>
+                      <span className="font-medium">{issue.status === 'resolved' ? '复核通过' : '复核退回'}：</span>{issue.review_comment}
+                    </p>
+                  </div>
+                )}
               </div>
             ))
           )}
@@ -188,7 +222,7 @@ export default function Issues() {
 
       {selectedIssue && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl mx-4 max-h-[80vh] overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-gray-100">
               <div className="flex items-center justify-between">
                 <div>
@@ -203,7 +237,10 @@ export default function Issues() {
                   </div>
                 </div>
                 <button
-                  onClick={() => setSelectedIssue(null)}
+                  onClick={() => {
+                    setSelectedIssue(null);
+                    setShowRectificationForm(false);
+                  }}
                   className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center"
                 >
                   <span className="text-gray-500">×</span>
@@ -215,12 +252,38 @@ export default function Issues() {
                 <label className="block text-sm font-medium text-gray-700 mb-2">问题描述</label>
                 <p className="text-gray-800 bg-gray-50 p-4 rounded-lg">{selectedIssue.description}</p>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">关联批次</label>
-                <p className="text-gray-800">{selectedIssue.batch_name}</p>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">所属批次</label>
+                  <p className="text-gray-800">{selectedIssue.batch_name}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">道路名称</label>
+                  <p className="text-gray-800">{selectedIssue.road_name}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">道路类型</label>
+                  <p className="text-gray-800">{selectedIssue.road_type}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">采集方向</label>
+                  <p className="text-gray-800 flex items-center gap-1">
+                    <Navigation className="w-4 h-4" />
+                    {selectedIssue.direction}
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">坐标位置</label>
+                  <p className="text-gray-800 flex items-center gap-1">
+                    <MapPin className="w-4 h-4" />
+                    {selectedIssue.latitude?.toFixed(6)}, {selectedIssue.longitude?.toFixed(6)}
+                  </p>
+                </div>
               </div>
+              
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">相关素材</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">素材预览</label>
                 <div className="bg-gray-900 rounded-lg overflow-hidden">
                   <img
                     src={selectedIssue.material_url}
@@ -229,33 +292,91 @@ export default function Issues() {
                   />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">创建时间</label>
-                    <p className="text-gray-800">{formatDate(selectedIssue.created_at)}</p>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">更新时间</label>
-                    <p className="text-gray-800">{formatDate(selectedIssue.updated_at)}</p>
+              
+              {selectedIssue.rectification_note && (
+                <div className="bg-primary-50 rounded-lg p-4 border border-primary-200">
+                  <label className="block text-sm font-medium text-primary-700 mb-1">整改说明</label>
+                  <p className="text-primary-800">{selectedIssue.rectification_note}</p>
+                </div>
+              )}
+              
+              {selectedIssue.review_comment && (
+                <div className={`rounded-lg p-4 border ${selectedIssue.status === 'resolved' ? 'bg-success-50 border-success-200' : 'bg-danger-50 border-danger-200'}`}>
+                  <label className={`block text-sm font-medium mb-1 ${selectedIssue.status === 'resolved' ? 'text-success-700' : 'text-danger-700'}`}>
+                    {selectedIssue.status === 'resolved' ? '复核通过意见' : '复核退回意见'}
+                  </label>
+                  <p className={`${selectedIssue.status === 'resolved' ? 'text-success-800' : 'text-danger-800'}`}>
+                    {selectedIssue.review_comment}
+                  </p>
+                </div>
+              )}
+              
+              {selectedIssue.status === 'pending' && !showRectificationForm && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowRectificationForm(true);
+                  }}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+                >
+                  <Send className="w-4 h-4" />
+                  提交整改说明
+                </button>
+              )}
+              
+              {showRectificationForm && (
+                <div className="border border-gray-200 rounded-lg p-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">整改说明</label>
+                  <textarea
+                    value={rectificationNote}
+                    onChange={(e) => setRectificationNote(e.target.value)}
+                    placeholder="请输入整改说明，描述如何处理此问题..."
+                    rows={4}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 resize-none"
+                  />
+                  <div className="flex items-center gap-3 mt-4">
+                    <button
+                      onClick={() => setShowRectificationForm(false)}
+                      className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+                    >
+                      取消
+                    </button>
+                    <button
+                      onClick={handleSubmitRectification}
+                      disabled={!rectificationNote.trim()}
+                      className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <Send className="w-4 h-4" />
+                      提交整改
+                    </button>
                   </div>
                 </div>
-                {selectedIssue.review_comment && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">复核意见</label>
-                    <p className={`text-gray-800 p-4 rounded-lg ${selectedIssue.status === 'resolved' ? 'bg-success-50 border border-success-200' : 'bg-danger-50 border border-danger-200'}`}>
-                      {selectedIssue.review_comment}
-                    </p>
-                  </div>
-                )}
+              )}
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">创建时间</label>
+                  <p className="text-gray-800">{formatDate(selectedIssue.created_at)}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">更新时间</label>
+                  <p className="text-gray-800">{formatDate(selectedIssue.updated_at)}</p>
+                </div>
               </div>
+            </div>
+            {!showRectificationForm && (
               <div className="p-6 border-t border-gray-100">
                 <button
-                  onClick={() => setSelectedIssue(null)}
+                  onClick={() => {
+                    setSelectedIssue(null);
+                    setShowRectificationForm(false);
+                  }}
                   className="w-full px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
                 >
                   关闭
                 </button>
               </div>
+            )}
           </div>
         </div>
       )}

@@ -1,34 +1,115 @@
-import { useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { useAppStore } from '../store';
-import { ISSUE_TYPE_MAP } from '../types';
-import { Download, BarChart3, PieChart, TrendingUp, FileText } from 'lucide-react';
+import { ISSUE_TYPE_MAP, STATUS_MAP } from '../types';
+import { Download, BarChart3, PieChart, TrendingUp, FileText, Filter } from 'lucide-react';
 
 export default function Statistics() {
   const batches = useAppStore(state => state.batches);
   const issues = useAppStore(state => state.issues);
-  const statistics = useAppStore(state => state.statistics);
-  const calculateStatistics = useAppStore(state => state.calculateStatistics);
 
-  useEffect(() => {
-    calculateStatistics();
-  }, [calculateStatistics]);
+  const [selectedBatchId, setSelectedBatchId] = useState<string>('all');
+  const [selectedTeamId, setSelectedTeamId] = useState<string>('all');
 
-  const totalBatches = batches.length;
-  const totalMaterials = batches.reduce((sum, b) => sum + b.material_count, 0);
-  const totalIssues = issues.length;
+  const teams = useMemo(() => {
+    const teamMap = new Map<string, string>();
+    batches.forEach(batch => {
+      if (batch.team_id && batch.team_name) {
+        teamMap.set(batch.team_id, batch.team_name);
+      }
+    });
+    return Array.from(teamMap.entries()).map(([id, name]) => ({ id, name }));
+  }, [batches]);
+
+  const filteredBatches = useMemo(() => {
+    return batches.filter(batch => {
+      if (selectedBatchId !== 'all' && batch.id !== selectedBatchId) return false;
+      if (selectedTeamId !== 'all' && batch.team_id !== selectedTeamId) return false;
+      return true;
+    });
+  }, [batches, selectedBatchId, selectedTeamId]);
+
+  const filteredIssues = useMemo(() => {
+    return issues.filter(issue => {
+      const batch = batches.find(b => b.id === issue.batch_id);
+      if (!batch) return false;
+      if (selectedBatchId !== 'all' && batch.id !== selectedBatchId) return false;
+      if (selectedTeamId !== 'all' && batch.team_id !== selectedTeamId) return false;
+      return true;
+    });
+  }, [issues, batches, selectedBatchId, selectedTeamId]);
+
+  const statistics = useMemo(() => {
+    const byTeam = filteredBatches.reduce((acc, batch) => {
+      const team = acc.find(t => t.team_name === batch.team_name);
+      const teamIssues = filteredIssues.filter(i => i.batch_id === batch.id);
+      if (team) {
+        team.total_batches++;
+        team.total_materials += batch.material_count;
+        team.issue_count += teamIssues.length;
+      } else {
+        acc.push({
+          team_name: batch.team_name || '',
+          total_batches: 1,
+          total_materials: batch.material_count,
+          issue_count: teamIssues.length,
+          pass_rate: batch.material_count > 0
+            ? ((batch.material_count - teamIssues.length) / batch.material_count) * 100
+            : 0,
+        });
+      }
+      return acc;
+    }, [] as { team_name: string; total_batches: number; total_materials: number; issue_count: number; pass_rate: number }[]);
+
+    const byRoadType = filteredBatches.reduce((acc, batch) => {
+      const roadType = acc.find(r => r.road_type === batch.road_type);
+      const typeIssues = filteredIssues.filter(i => i.batch_id === batch.id);
+      if (roadType) {
+        roadType.total_batches++;
+        roadType.issue_count += typeIssues.length;
+      } else {
+        acc.push({
+          road_type: batch.road_type,
+          total_batches: 1,
+          issue_count: typeIssues.length,
+        });
+      }
+      return acc;
+    }, [] as { road_type: string; total_batches: number; issue_count: number }[]);
+
+    const issueTypeCounts: Record<string, number> = {};
+    filteredIssues.forEach(issue => {
+      issueTypeCounts[issue.type] = (issueTypeCounts[issue.type] || 0) + 1;
+    });
+    const totalIssues = filteredIssues.length;
+    const byIssueType = Object.entries(issueTypeCounts).map(([type, count]) => ({
+      issue_type: type,
+      count,
+      percentage: totalIssues > 0 ? (count / totalIssues) * 100 : 0,
+    }));
+
+    return { byTeam, byRoadType, byIssueType };
+  }, [filteredBatches, filteredIssues]);
+
+  const totalBatches = filteredBatches.length;
+  const totalMaterials = filteredBatches.reduce((sum, b) => sum + b.material_count, 0);
+  const totalIssues = filteredIssues.length;
   const avgIssueRate = totalMaterials > 0 ? (totalIssues / totalMaterials) * 100 : 0;
 
   const exportQualityList = () => {
-    const data = batches.map(batch => ({
+    const data = filteredBatches.map(batch => ({
       批次名称: batch.name,
       道路类型: batch.road_type,
       采集团队: batch.team_name,
+      道路名称: batch.road_name,
       素材总数: batch.material_count,
       已抽检数: batch.inspected_count,
       问题数: batch.issue_count,
-      状态: batch.status === 'completed' ? '已完成' : batch.status === 'inspecting' ? '抽检中' : batch.status === 'reviewing' ? '复核中' : '待处理',
+      异常占比: batch.material_count > 0 ? ((batch.issue_count / batch.material_count) * 100).toFixed(2) + '%' : '0%',
+      状态: STATUS_MAP[batch.status],
+      创建时间: new Date(batch.created_at).toLocaleString('zh-CN'),
+      更新时间: new Date(batch.updated_at).toLocaleString('zh-CN'),
     }));
-    
+
     const csv = [Object.keys(data[0]).join(','), ...data.map(row => Object.values(row).join(','))].join('\n');
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
@@ -38,17 +119,22 @@ export default function Statistics() {
   };
 
   const exportIssueDetails = () => {
-    const data = issues.map(issue => ({
+    const data = filteredIssues.map(issue => ({
       问题ID: issue.id,
       批次名称: issue.batch_name,
+      道路名称: issue.road_name,
+      道路类型: issue.road_type,
       问题类型: ISSUE_TYPE_MAP[issue.type],
       问题描述: issue.description,
-      状态: issue.status === 'pending' ? '待处理' : issue.status === 'reviewing' ? '复核中' : issue.status === 'resolved' ? '已解决' : '已退回',
+      坐标位置: issue.latitude ? `${issue.latitude.toFixed(6)}, ${issue.longitude?.toFixed(6)}` : '',
+      采集方向: issue.direction || '',
+      状态: STATUS_MAP[issue.status],
+      整改说明: issue.rectification_note || '',
       复核意见: issue.review_comment || '',
       创建时间: new Date(issue.created_at).toLocaleString('zh-CN'),
       更新时间: new Date(issue.updated_at).toLocaleString('zh-CN'),
     }));
-    
+
     const csv = [Object.keys(data[0]).join(','), ...data.map(row => Object.values(row).join(','))].join('\n');
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
@@ -85,6 +171,52 @@ export default function Statistics() {
         </div>
       </div>
 
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 mb-6">
+        <div className="flex items-center gap-4 flex-wrap">
+          <div className="flex items-center gap-2">
+            <Filter className="w-5 h-5 text-gray-400" />
+            <span className="text-sm font-medium text-gray-700">筛选条件：</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-500">批次：</span>
+            <select
+              value={selectedBatchId}
+              onChange={(e) => setSelectedBatchId(e.target.value)}
+              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+            >
+              <option value="all">全部批次</option>
+              {batches.map(batch => (
+                <option key={batch.id} value={batch.id}>{batch.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-500">团队：</span>
+            <select
+              value={selectedTeamId}
+              onChange={(e) => setSelectedTeamId(e.target.value)}
+              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+            >
+              <option value="all">全部团队</option>
+              {teams.map(team => (
+                <option key={team.id} value={team.id}>{team.name}</option>
+              ))}
+            </select>
+          </div>
+          {(selectedBatchId !== 'all' || selectedTeamId !== 'all') && (
+            <button
+              onClick={() => {
+                setSelectedBatchId('all');
+                setSelectedTeamId('all');
+              }}
+              className="px-4 py-2 text-sm text-primary-600 hover:text-primary-700"
+            >
+              清除筛选
+            </button>
+          )}
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
         <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
           <div className="flex items-center justify-between">
@@ -97,7 +229,7 @@ export default function Statistics() {
             </div>
           </div>
         </div>
-        
+
         <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
           <div className="flex items-center justify-between">
             <div>
@@ -109,7 +241,7 @@ export default function Statistics() {
             </div>
           </div>
         </div>
-        
+
         <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
           <div className="flex items-center justify-between">
             <div>
@@ -121,7 +253,7 @@ export default function Statistics() {
             </div>
           </div>
         </div>
-        
+
         <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
           <div className="flex items-center justify-between">
             <div>
@@ -161,6 +293,11 @@ export default function Statistics() {
                   </div>
                 </div>
               ))}
+              {statistics.byTeam.length === 0 && (
+                <div className="text-center py-8">
+                  <p className="text-gray-500">暂无数据</p>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -188,6 +325,11 @@ export default function Statistics() {
                   </div>
                 </div>
               ))}
+              {statistics.byRoadType.length === 0 && (
+                <div className="text-center py-8">
+                  <p className="text-gray-500">暂无数据</p>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -208,6 +350,11 @@ export default function Statistics() {
                   <div className="text-xs text-gray-400 mt-1">{issue.percentage.toFixed(1)}%</div>
                 </div>
               ))}
+              {statistics.byIssueType.length === 0 && (
+                <div className="col-span-full text-center py-8">
+                  <p className="text-gray-500">暂无数据</p>
+                </div>
+              )}
             </div>
           </div>
         </div>
