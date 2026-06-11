@@ -38,6 +38,7 @@ export interface Issue {
   updated_at: string;
   material_url?: string;
   batch_name?: string;
+  review_comment?: string;
 }
 
 export interface Review {

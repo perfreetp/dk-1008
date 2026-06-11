@@ -44,6 +44,7 @@ export default function Statistics() {
       问题类型: ISSUE_TYPE_MAP[issue.type],
       问题描述: issue.description,
       状态: issue.status === 'pending' ? '待处理' : issue.status === 'reviewing' ? '复核中' : issue.status === 'resolved' ? '已解决' : '已退回',
+      复核意见: issue.review_comment || '',
       创建时间: new Date(issue.created_at).toLocaleString('zh-CN'),
       更新时间: new Date(issue.updated_at).toLocaleString('zh-CN'),
     }));

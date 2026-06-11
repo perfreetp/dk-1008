@@ -164,17 +164,31 @@ export default function Inspection({ onNavigate }: InspectionProps) {
           <div className="mt-4 flex items-center justify-center gap-3">
             <button
               onClick={handleMarkPassed}
-              className="flex items-center gap-2 px-6 py-3 bg-success-500 text-white rounded-lg hover:bg-success-600 transition-colors"
+              disabled={currentMaterial.status !== 'pending'}
+              className={`flex items-center gap-2 px-6 py-3 rounded-lg transition-colors ${
+                currentMaterial.status === 'passed'
+                  ? 'bg-success-100 text-success-600 cursor-default'
+                  : currentMaterial.status === 'issue'
+                  ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                  : 'bg-success-500 text-white hover:bg-success-600'
+              }`}
             >
               <CheckCircle className="w-5 h-5" />
-              <span>标记合格</span>
+              <span>{currentMaterial.status === 'passed' ? '已标记合格' : '标记合格'}</span>
             </button>
             <button
               onClick={() => setShowIssueModal(true)}
-              className="flex items-center gap-2 px-6 py-3 bg-danger-500 text-white rounded-lg hover:bg-danger-600 transition-colors"
+              disabled={currentMaterial.status !== 'pending'}
+              className={`flex items-center gap-2 px-6 py-3 rounded-lg transition-colors ${
+                currentMaterial.status === 'issue'
+                  ? 'bg-danger-100 text-danger-600 cursor-default'
+                  : currentMaterial.status === 'passed'
+                  ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                  : 'bg-danger-500 text-white hover:bg-danger-600'
+              }`}
             >
               <AlertCircle className="w-5 h-5" />
-              <span>报告问题</span>
+              <span>{currentMaterial.status === 'issue' ? '已报告问题' : '报告问题'}</span>
             </button>
           </div>
         </div>

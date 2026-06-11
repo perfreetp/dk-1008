@@ -230,24 +230,32 @@ export default function Issues() {
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">创建时间</label>
-                  <p className="text-gray-800">{formatDate(selectedIssue.created_at)}</p>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">创建时间</label>
+                    <p className="text-gray-800">{formatDate(selectedIssue.created_at)}</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">更新时间</label>
+                    <p className="text-gray-800">{formatDate(selectedIssue.updated_at)}</p>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">更新时间</label>
-                  <p className="text-gray-800">{formatDate(selectedIssue.updated_at)}</p>
-                </div>
+                {selectedIssue.review_comment && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">复核意见</label>
+                    <p className={`text-gray-800 p-4 rounded-lg ${selectedIssue.status === 'resolved' ? 'bg-success-50 border border-success-200' : 'bg-danger-50 border border-danger-200'}`}>
+                      {selectedIssue.review_comment}
+                    </p>
+                  </div>
+                )}
               </div>
-            </div>
-            <div className="p-6 border-t border-gray-100">
-              <button
-                onClick={() => setSelectedIssue(null)}
-                className="w-full px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
-              >
-                关闭
-              </button>
-            </div>
+              <div className="p-6 border-t border-gray-100">
+                <button
+                  onClick={() => setSelectedIssue(null)}
+                  className="w-full px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+                >
+                  关闭
+                </button>
+              </div>
           </div>
         </div>
       )}

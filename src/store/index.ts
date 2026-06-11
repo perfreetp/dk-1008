@@ -20,13 +20,29 @@ interface AppState {
   calculateStatistics: () => void;
 }
 
+const STORAGE_KEY = 'road-quality-inspection';
+
+const loadFromStorage = (): Partial<AppState> => {
+  try {
+    const data = localStorage.getItem(STORAGE_KEY);
+    if (data) {
+      return JSON.parse(data);
+    }
+  } catch (e) {
+    console.error('Failed to load from storage:', e);
+  }
+  return {};
+};
+
+const savedData = loadFromStorage();
+
 export const useAppStore = create<AppState>((set, get) => ({
-  batches: mockBatches,
-  materials: mockMaterials,
-  issues: mockIssues,
+  batches: savedData.batches || mockBatches,
+  materials: savedData.materials || mockMaterials,
+  issues: savedData.issues || mockIssues,
   currentBatch: null,
   currentMaterial: null,
-  selectedBatchId: null,
+  selectedBatchId: savedData.selectedBatchId || null,
   statistics: {
     byTeam: [],
     byRoadType: [],
@@ -48,58 +64,104 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   markMaterialPassed: (materialId) => {
-    set(state => ({
-      materials: state.materials.map(m =>
-        m.id === materialId ? { ...m, status: 'passed' } : m
-      ),
-    }));
-    const batchId = get().materials.find(m => m.id === materialId)?.batch_id;
-    if (batchId) {
-      set(state => ({
-        batches: state.batches.map(b =>
-          b.id === batchId ? { ...b, inspected_count: b.inspected_count + 1 } : b
-        ),
-      }));
+    const materials = get().materials;
+    const material = materials.find(m => m.id === materialId);
+    const passedStatus: Material['status'] = 'passed';
+    
+    if (material && material.status === 'pending') {
+      set(state => {
+        const newBatches = state.batches.map(b =>
+          b.id === material?.batch_id ? { ...b, inspected_count: b.inspected_count + 1 } : b
+        );
+        const newMaterials = state.materials.map(m =>
+          m.id === materialId ? { ...m, status: passedStatus } : m
+        );
+        
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({
+          batches: newBatches,
+          materials: newMaterials,
+          issues: state.issues,
+          selectedBatchId: state.selectedBatchId,
+        }));
+        
+        return { batches: newBatches, materials: newMaterials };
+      });
     }
   },
 
   createIssue: (issue) => {
-    const newIssue: Issue = {
-      ...issue,
-      id: Date.now().toString(),
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-    set(state => ({ issues: [...state.issues, newIssue] }));
-    set(state => ({
-      materials: state.materials.map(m =>
-        m.id === issue.material_id ? { ...m, status: 'issue' } : m
-      ),
-    }));
-    if (issue.batch_id) {
-      set(state => ({
-        batches: state.batches.map(b =>
-          b.id === issue.batch_id ? { ...b, issue_count: b.issue_count + 1, inspected_count: b.inspected_count + 1 } : b
-        ),
-      }));
+    const materials = get().materials;
+    const material = materials.find(m => m.id === issue.material_id);
+    const issueStatus: Material['status'] = 'issue';
+    
+    if (material && material.status === 'pending') {
+      const newIssue: Issue = {
+        ...issue,
+        id: Date.now().toString(),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      set(state => {
+        const newIssues = [...state.issues, newIssue];
+        const newMaterials = state.materials.map(m =>
+          m.id === issue.material_id ? { ...m, status: issueStatus } : m
+        );
+        const newBatches = state.batches.map(b =>
+          b.id === issue.batch_id 
+            ? { ...b, issue_count: b.issue_count + 1, inspected_count: b.inspected_count + 1 } 
+            : b
+        );
+        
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({
+          batches: newBatches,
+          materials: newMaterials,
+          issues: newIssues,
+          selectedBatchId: state.selectedBatchId,
+        }));
+        
+        return { batches: newBatches, materials: newMaterials, issues: newIssues };
+      });
     }
   },
 
   updateIssueStatus: (issueId, status) => {
-    set(state => ({
-      issues: state.issues.map(i =>
+    set(state => {
+      const newIssues = state.issues.map(i =>
         i.id === issueId ? { ...i, status, updated_at: new Date().toISOString() } : i
-      ),
-    }));
+      );
+      
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        batches: state.batches,
+        materials: state.materials,
+        issues: newIssues,
+        selectedBatchId: state.selectedBatchId,
+      }));
+      
+      return { issues: newIssues };
+    });
   },
 
   reviewIssue: (issueId, result, comment) => {
     const status: Issue['status'] = result === 'passed' ? 'resolved' : 'rejected';
-    set(state => ({
-      issues: state.issues.map(i =>
-        i.id === issueId ? { ...i, status, updated_at: new Date().toISOString() } : i
-      ),
-    }));
+    set(state => {
+      const newIssues = state.issues.map(i =>
+        i.id === issueId ? { 
+          ...i, 
+          status, 
+          updated_at: new Date().toISOString(),
+          review_comment: comment 
+        } : i
+      );
+      
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        batches: state.batches,
+        materials: state.materials,
+        issues: newIssues,
+        selectedBatchId: state.selectedBatchId,
+      }));
+      
+      return { issues: newIssues };
+    });
   },
 
   calculateStatistics: () => {
