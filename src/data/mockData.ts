@@ -184,6 +184,15 @@ export const mockIssues: Issue[] = [
     latitude: 39.9043,
     longitude: 116.4075,
     direction: '东',
+    flow_records: [
+      {
+        id: 'f1',
+        action: 'registered',
+        comment: '图片模糊，无法清晰辨认道路标线',
+        operator: '抽检员A',
+        created_at: '2024-02-22T10:30:00Z',
+      },
+    ],
   },
   {
     id: '2',
@@ -202,6 +211,22 @@ export const mockIssues: Issue[] = [
     longitude: 116.4077,
     direction: '西',
     rectification_note: '已重新采集该路段视频，画面清晰无遮挡',
+    flow_records: [
+      {
+        id: 'f2',
+        action: 'registered',
+        comment: '视频画面被树木遮挡，无法完整采集道路信息',
+        operator: '抽检员B',
+        created_at: '2024-02-23T11:15:00Z',
+      },
+      {
+        id: 'f3',
+        action: 'rectification_submitted',
+        comment: '已重新采集该路段视频，画面清晰无遮挡',
+        operator: '整改员C',
+        created_at: '2024-02-24T14:00:00Z',
+      },
+    ],
   },
   {
     id: '3',
@@ -220,6 +245,29 @@ export const mockIssues: Issue[] = [
     longitude: 116.4085,
     direction: '北',
     review_comment: '重复图片已删除，整改完成',
+    flow_records: [
+      {
+        id: 'f4',
+        action: 'registered',
+        comment: '该图片与前一张重复采集',
+        operator: '抽检员A',
+        created_at: '2024-01-18T09:20:00Z',
+      },
+      {
+        id: 'f5',
+        action: 'rectification_submitted',
+        comment: '已删除重复图片',
+        operator: '整改员D',
+        created_at: '2024-01-19T10:00:00Z',
+      },
+      {
+        id: 'f6',
+        action: 'review_passed',
+        comment: '重复图片已删除，整改完成',
+        operator: '复核员E',
+        created_at: '2024-01-19T15:30:00Z',
+      },
+    ],
   },
   {
     id: '4',
@@ -239,6 +287,29 @@ export const mockIssues: Issue[] = [
     direction: '东',
     rectification_note: '已修正桩号标注',
     review_comment: '桩号修正不准确，需要重新核对',
+    flow_records: [
+      {
+        id: 'f7',
+        action: 'registered',
+        comment: '桩号标注错误，实际位置与桩号不符',
+        operator: '抽检员B',
+        created_at: '2024-03-15T14:45:00Z',
+      },
+      {
+        id: 'f8',
+        action: 'rectification_submitted',
+        comment: '已修正桩号标注',
+        operator: '整改员C',
+        created_at: '2024-03-17T11:00:00Z',
+      },
+      {
+        id: 'f9',
+        action: 'review_rejected',
+        comment: '桩号修正不准确，需要重新核对',
+        operator: '复核员E',
+        created_at: '2024-03-18T10:00:00Z',
+      },
+    ],
   },
   {
     id: '5',
@@ -256,5 +327,14 @@ export const mockIssues: Issue[] = [
     latitude: 39.9065,
     longitude: 116.4095,
     direction: '南',
+    flow_records: [
+      {
+        id: 'f10',
+        action: 'registered',
+        comment: '道路类型标签标注偏差，应为城市快速路而非主干道',
+        operator: '抽检员A',
+        created_at: '2024-03-16T16:20:00Z',
+      },
+    ],
   },
 ];

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useAppStore } from '../store';
-import { Batch, STATUS_MAP, ISSUE_TYPE_MAP } from '../types';
-import { ArrowRight, CheckCircle, AlertTriangle, Clock, TrendingUp, Map, Percent, Eye, X, BarChart3 } from 'lucide-react';
+import { Batch, STATUS_MAP, ISSUE_TYPE_MAP, Issue } from '../types';
+import { ArrowRight, CheckCircle, AlertTriangle, Clock, TrendingUp, Map, Percent, Eye, X, BarChart3, Navigation, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react';
 
 interface DashboardProps {
   onNavigate: (page: string) => void;
@@ -13,6 +13,8 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
   const materials = useAppStore(state => state.materials);
   const setSelectedBatchId = useAppStore(state => state.setSelectedBatchId);
   const [selectedBatch, setSelectedBatch] = useState<Batch | null>(null);
+  const [expandedRoadSection, setExpandedRoadSection] = useState<string | null>(null);
+  const [selectedIssueDetail, setSelectedIssueDetail] = useState<Issue | null>(null);
 
   const totalBatches = batches.length;
   const completedBatches = batches.filter(b => b.status === 'completed').length;
@@ -53,6 +55,8 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
   const handleViewDetail = (batch: Batch, e: React.MouseEvent) => {
     e.stopPropagation();
     setSelectedBatch(batch);
+    setExpandedRoadSection(null);
+    setSelectedIssueDetail(null);
   };
 
   const getBatchIssues = (batchId: string) => issues.filter(i => i.batch_id === batchId);
@@ -65,6 +69,41 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
       distribution[issue.type] = (distribution[issue.type] || 0) + 1;
     });
     return distribution;
+  };
+
+  const getRoadSections = (batchId: string) => {
+    const batchMaterials = getBatchMaterials(batchId);
+    const sections: Record<string, { materials: typeof batchMaterials; issues: Issue[] }> = {};
+    
+    batchMaterials.forEach(material => {
+      const sectionKey = material.direction || '未知方向';
+      if (!sections[sectionKey]) {
+        sections[sectionKey] = { materials: [], issues: [] };
+      }
+      sections[sectionKey].materials.push(material);
+    });
+
+    const batchIssues = getBatchIssues(batchId);
+    batchIssues.forEach(issue => {
+      const material = batchMaterials.find(m => m.id === issue.material_id);
+      const sectionKey = material?.direction || '未知方向';
+      if (sections[sectionKey]) {
+        sections[sectionKey].issues.push(issue);
+      }
+    });
+
+    return sections;
+  };
+
+  const formatDate = (dateStr: string) => {
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('zh-CN', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
   };
 
   return (
@@ -249,7 +288,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
 
       {selectedBatch && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-3xl mx-4 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl mx-4 max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-gray-100">
               <div className="flex items-center justify-between">
                 <div>
@@ -261,7 +300,10 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
                   </div>
                 </div>
                 <button
-                  onClick={() => setSelectedBatch(null)}
+                  onClick={() => {
+                    setSelectedBatch(null);
+                    setSelectedIssueDetail(null);
+                  }}
                   className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center"
                 >
                   <X className="w-5 h-5 text-gray-500" />
@@ -285,7 +327,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
                 <div className="bg-gray-50 rounded-lg p-4">
                   <p className="text-sm text-gray-500">创建时间</p>
                   <p className="text-lg font-semibold text-gray-800 mt-1">
-                    {new Date(selectedBatch.created_at).toLocaleDateString('zh-CN')}
+                    {formatDate(selectedBatch.created_at)}
                   </p>
                 </div>
               </div>
@@ -386,10 +428,113 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
               </div>
 
               <div className="bg-white border border-gray-200 rounded-lg p-4">
+                <h4 className="font-medium text-gray-800 mb-4 flex items-center gap-2">
+                  <Navigation className="w-4 h-4" />
+                  路线段视角
+                </h4>
+                <div className="space-y-3">
+                  {Object.entries(getRoadSections(selectedBatch.id)).map(([section, data]) => {
+                    const isExpanded = expandedRoadSection === section;
+                    const passedCount = data.materials.filter(m => m.status === 'passed').length;
+                    const pendingCount = data.materials.filter(m => m.status === 'pending').length;
+                    const issueCount = data.issues.length;
+                    const recentIssues = data.issues.slice(-3);
+
+                    return (
+                      <div key={section} className="border border-gray-200 rounded-lg overflow-hidden">
+                        <button
+                          onClick={() => setExpandedRoadSection(isExpanded ? null : section)}
+                          className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors"
+                        >
+                          <div className="flex items-center gap-3">
+                            <Navigation className="w-5 h-5 text-gray-500" />
+                            <span className="font-medium text-gray-800">{section}路段</span>
+                            <span className="text-sm text-gray-500">
+                              ({data.materials.length}个素材, {issueCount}个问题)
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-4">
+                            <div className="flex items-center gap-2 text-sm">
+                              <span className="text-success-600">{passedCount}已抽检</span>
+                              <span className="text-gray-400">|</span>
+                              <span className="text-gray-500">{pendingCount}待抽检</span>
+                              {issueCount > 0 && (
+                                <>
+                                  <span className="text-gray-400">|</span>
+                                  <span className="text-danger-600">{issueCount}问题</span>
+                                </>
+                              )}
+                            </div>
+                            {isExpanded ? (
+                              <ChevronUp className="w-5 h-5 text-gray-400" />
+                            ) : (
+                              <ChevronDown className="w-5 h-5 text-gray-400" />
+                            )}
+                          </div>
+                        </button>
+                        {isExpanded && (
+                          <div className="px-4 pb-4">
+                            {recentIssues.length > 0 && (
+                              <div className="border-t border-gray-100 pt-4">
+                                <p className="text-sm font-medium text-gray-700 mb-3">最近异常（{recentIssues.length}条）</p>
+                                <div className="space-y-2">
+                                  {recentIssues.map(issue => (
+                                    <div
+                                      key={issue.id}
+                                      onClick={() => setSelectedIssueDetail(issue)}
+                                      className="flex items-center justify-between p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors"
+                                    >
+                                      <div>
+                                        <div className="flex items-center gap-2">
+                                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                                            issue.type === 'blur' ? 'bg-purple-100 text-purple-600' :
+                                            issue.type === 'occlusion' ? 'bg-orange-100 text-orange-600' :
+                                            issue.type === 'duplicate' ? 'bg-blue-100 text-blue-600' :
+                                            issue.type === 'mileage_error' ? 'bg-red-100 text-red-600' :
+                                            'bg-green-100 text-green-600'
+                                          }`}>
+                                            {ISSUE_TYPE_MAP[issue.type]}
+                                          </span>
+                                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                                            issue.status === 'pending' ? 'bg-gray-100 text-gray-600' :
+                                            issue.status === 'reviewing' ? 'bg-primary-100 text-primary-600' :
+                                            issue.status === 'resolved' ? 'bg-success-100 text-success-600' :
+                                            'bg-danger-100 text-danger-600'
+                                          }`}>
+                                            {STATUS_MAP[issue.status]}
+                                          </span>
+                                        </div>
+                                        <p className="text-sm text-gray-700 mt-1">{issue.description}</p>
+                                      </div>
+                                      <ExternalLink className="w-4 h-4 text-gray-400" />
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            {recentIssues.length === 0 && (
+                              <div className="border-t border-gray-100 pt-4 text-center">
+                                <CheckCircle className="w-8 h-8 text-success-400 mx-auto mb-2" />
+                                <p className="text-sm text-gray-500">该路段暂无问题</p>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="bg-white border border-gray-200 rounded-lg p-4">
                 <h4 className="font-medium text-gray-800 mb-4">问题列表</h4>
                 <div className="space-y-3">
                   {getBatchIssues(selectedBatch.id).map(issue => (
-                    <div key={issue.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div
+                      key={issue.id}
+                      onClick={() => setSelectedIssueDetail(issue)}
+                      className="flex items-center justify-between p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors"
+                    >
                       <div>
                         <div className="flex items-center gap-2">
                           <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
@@ -412,9 +557,10 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
                         </div>
                         <p className="text-sm text-gray-700 mt-1">{issue.description}</p>
                       </div>
-                      <span className="text-xs text-gray-400">
-                        {new Date(issue.created_at).toLocaleDateString('zh-CN')}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-400">{formatDate(issue.created_at)}</span>
+                        <ExternalLink className="w-4 h-4 text-gray-400" />
+                      </div>
                     </div>
                   ))}
                   {getBatchIssues(selectedBatch.id).length === 0 && (
@@ -428,7 +574,107 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
             </div>
             <div className="p-6 border-t border-gray-100">
               <button
-                onClick={() => setSelectedBatch(null)}
+                onClick={() => {
+                  setSelectedBatch(null);
+                  setSelectedIssueDetail(null);
+                }}
+                className="w-full px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+              >
+                关闭
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selectedIssueDetail && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-gray-100">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-800">问题详情</h3>
+                  <div className="flex items-center gap-2 mt-2">
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                      selectedIssueDetail.type === 'blur' ? 'bg-purple-100 text-purple-600' :
+                      selectedIssueDetail.type === 'occlusion' ? 'bg-orange-100 text-orange-600' :
+                      selectedIssueDetail.type === 'duplicate' ? 'bg-blue-100 text-blue-600' :
+                      selectedIssueDetail.type === 'mileage_error' ? 'bg-red-100 text-red-600' :
+                      'bg-green-100 text-green-600'
+                    }`}>
+                      {ISSUE_TYPE_MAP[selectedIssueDetail.type]}
+                    </span>
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                      selectedIssueDetail.status === 'pending' ? 'bg-gray-100 text-gray-600' :
+                      selectedIssueDetail.status === 'reviewing' ? 'bg-primary-100 text-primary-600' :
+                      selectedIssueDetail.status === 'resolved' ? 'bg-success-100 text-success-600' :
+                      'bg-danger-100 text-danger-600'
+                    }`}>
+                      {STATUS_MAP[selectedIssueDetail.status]}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setSelectedIssueDetail(null)}
+                  className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center"
+                >
+                  <X className="w-5 h-5 text-gray-500" />
+                </button>
+              </div>
+            </div>
+            <div className="p-6 space-y-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">问题描述</label>
+                <p className="text-gray-800 bg-gray-50 p-4 rounded-lg">{selectedIssueDetail.description}</p>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <label className="block text-xs text-gray-500 mb-1">所属批次</label>
+                  <p className="text-sm font-medium text-gray-800">{selectedIssueDetail.batch_name}</p>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <label className="block text-xs text-gray-500 mb-1">道路名称</label>
+                  <p className="text-sm font-medium text-gray-800">{selectedIssueDetail.road_name}</p>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <label className="block text-xs text-gray-500 mb-1">采集方向</label>
+                  <p className="text-sm font-medium text-gray-800">{selectedIssueDetail.direction}</p>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <label className="block text-xs text-gray-500 mb-1">创建时间</label>
+                  <p className="text-sm font-medium text-gray-800">{formatDate(selectedIssueDetail.created_at)}</p>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">素材预览</label>
+                <div className="bg-gray-900 rounded-lg overflow-hidden">
+                  <img
+                    src={selectedIssueDetail.material_url}
+                    alt="问题素材"
+                    className="w-full h-64 object-contain"
+                  />
+                </div>
+              </div>
+              {selectedIssueDetail.rectification_note && (
+                <div className="bg-primary-50 rounded-lg p-4 border border-primary-200">
+                  <label className="block text-sm font-medium text-primary-700 mb-2">整改说明</label>
+                  <p className="text-primary-800">{selectedIssueDetail.rectification_note}</p>
+                </div>
+              )}
+              {selectedIssueDetail.review_comment && (
+                <div className={`rounded-lg p-4 border ${selectedIssueDetail.status === 'resolved' ? 'bg-success-50 border-success-200' : 'bg-danger-50 border-danger-200'}`}>
+                  <label className={`block text-sm font-medium mb-2 ${selectedIssueDetail.status === 'resolved' ? 'text-success-700' : 'text-danger-700'}`}>
+                    {selectedIssueDetail.status === 'resolved' ? '复核通过意见' : '复核退回意见'}
+                  </label>
+                  <p className={`${selectedIssueDetail.status === 'resolved' ? 'text-success-800' : 'text-danger-800'}`}>
+                    {selectedIssueDetail.review_comment}
+                  </p>
+                </div>
+              )}
+            </div>
+            <div className="p-6 border-t border-gray-100">
+              <button
+                onClick={() => setSelectedIssueDetail(null)}
                 className="w-full px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
               >
                 关闭

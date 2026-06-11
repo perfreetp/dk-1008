@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Batch, Material, Issue, Statistics } from '../types';
+import { Batch, Material, Issue, Statistics, FlowRecord } from '../types';
 import { mockBatches, mockMaterials, mockIssues } from '../data/mockData';
 
 interface AppState {
@@ -14,7 +14,7 @@ interface AppState {
   setSelectedBatchId: (id: string | null) => void;
   selectMaterial: (material: Material | null) => void;
   markMaterialPassed: (materialId: string) => void;
-  createIssue: (issue: Omit<Issue, 'id' | 'created_at' | 'updated_at'>) => void;
+  createIssue: (issue: Omit<Issue, 'id' | 'created_at' | 'updated_at' | 'flow_records'>) => void;
   updateIssueStatus: (issueId: string, status: Issue['status']) => void;
   reviewIssue: (issueId: string, result: 'passed' | 'rejected', comment: string) => void;
   submitRectification: (issueId: string, note: string) => void;
@@ -36,6 +36,14 @@ const loadFromStorage = (): Partial<AppState> => {
 };
 
 const savedData = loadFromStorage();
+
+const createFlowRecord = (action: FlowRecord['action'], comment?: string, operator?: string): FlowRecord => ({
+  id: Date.now().toString(),
+  action,
+  comment,
+  operator: operator || '系统用户',
+  created_at: new Date().toISOString(),
+});
 
 export const useAppStore = create<AppState>((set, get) => ({
   batches: savedData.batches || mockBatches,
@@ -96,11 +104,13 @@ export const useAppStore = create<AppState>((set, get) => ({
     const issueStatus: Material['status'] = 'issue';
     
     if (material && material.status === 'pending') {
+      const registerRecord = createFlowRecord('registered', issue.description);
       const newIssue: Issue = {
         ...issue,
         id: Date.now().toString(),
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
+        flow_records: [registerRecord],
       };
       set(state => {
         const newIssues = [...state.issues, newIssue];
@@ -144,13 +154,17 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   reviewIssue: (issueId, result, comment) => {
     const status: Issue['status'] = result === 'passed' ? 'resolved' : 'rejected';
+    const action: FlowRecord['action'] = result === 'passed' ? 'review_passed' : 'review_rejected';
+    const reviewRecord = createFlowRecord(action, comment);
+    
     set(state => {
       const newIssues = state.issues.map(i =>
         i.id === issueId ? { 
           ...i, 
           status, 
           updated_at: new Date().toISOString(),
-          review_comment: comment 
+          review_comment: comment,
+          flow_records: [...(i.flow_records || []), reviewRecord],
         } : i
       );
       
@@ -167,6 +181,8 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   submitRectification: (issueId, note) => {
     const reviewingStatus: Issue['status'] = 'reviewing';
+    const rectificationRecord = createFlowRecord('rectification_submitted', note);
+    
     set(state => {
       const newIssues = state.issues.map(i =>
         i.id === issueId ? { 
@@ -174,6 +190,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           status: reviewingStatus,
           rectification_note: note,
           updated_at: new Date().toISOString(),
+          flow_records: [...(i.flow_records || []), rectificationRecord],
         } : i
       );
       

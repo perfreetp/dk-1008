@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useAppStore } from '../store';
 import { ISSUE_TYPE_MAP, STATUS_MAP } from '../types';
-import { Download, BarChart3, PieChart, TrendingUp, FileText, Filter } from 'lucide-react';
+import { Download, BarChart3, PieChart, TrendingUp, FileText, Filter, Calendar, Map, Eye } from 'lucide-react';
 
 export default function Statistics() {
   const batches = useAppStore(state => state.batches);
@@ -9,24 +9,33 @@ export default function Statistics() {
 
   const [selectedBatchId, setSelectedBatchId] = useState<string>('all');
   const [selectedTeamId, setSelectedTeamId] = useState<string>('all');
+  const [issueStatusFilter, setIssueStatusFilter] = useState<string>('all');
+  const [roadTypeFilter, setRoadTypeFilter] = useState<string>('all');
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
 
   const teams = useMemo(() => {
-    const teamMap = new Map<string, string>();
+    const teamMap: Record<string, string> = {};
     batches.forEach(batch => {
       if (batch.team_id && batch.team_name) {
-        teamMap.set(batch.team_id, batch.team_name);
+        teamMap[batch.team_id] = batch.team_name;
       }
     });
-    return Array.from(teamMap.entries()).map(([id, name]) => ({ id, name }));
+    return Object.entries(teamMap).map(([id, name]) => ({ id, name }));
+  }, [batches]);
+
+  const roadTypes = useMemo(() => {
+    return [...new Set(batches.map(b => b.road_type))];
   }, [batches]);
 
   const filteredBatches = useMemo(() => {
     return batches.filter(batch => {
       if (selectedBatchId !== 'all' && batch.id !== selectedBatchId) return false;
       if (selectedTeamId !== 'all' && batch.team_id !== selectedTeamId) return false;
+      if (roadTypeFilter !== 'all' && batch.road_type !== roadTypeFilter) return false;
       return true;
     });
-  }, [batches, selectedBatchId, selectedTeamId]);
+  }, [batches, selectedBatchId, selectedTeamId, roadTypeFilter]);
 
   const filteredIssues = useMemo(() => {
     return issues.filter(issue => {
@@ -34,9 +43,13 @@ export default function Statistics() {
       if (!batch) return false;
       if (selectedBatchId !== 'all' && batch.id !== selectedBatchId) return false;
       if (selectedTeamId !== 'all' && batch.team_id !== selectedTeamId) return false;
+      if (roadTypeFilter !== 'all' && batch.road_type !== roadTypeFilter) return false;
+      if (issueStatusFilter !== 'all' && issue.status !== issueStatusFilter) return false;
+      if (startDate && new Date(issue.created_at) < new Date(startDate)) return false;
+      if (endDate && new Date(issue.created_at) > new Date(endDate)) return false;
       return true;
     });
-  }, [issues, batches, selectedBatchId, selectedTeamId]);
+  }, [issues, batches, selectedBatchId, selectedTeamId, roadTypeFilter, issueStatusFilter, startDate, endDate]);
 
   const statistics = useMemo(() => {
     const byTeam = filteredBatches.reduce((acc, batch) => {
@@ -96,21 +109,23 @@ export default function Statistics() {
   const avgIssueRate = totalMaterials > 0 ? (totalIssues / totalMaterials) * 100 : 0;
 
   const exportQualityList = () => {
+    const headers = ['批次名称', '道路类型', '采集团队', '道路名称', '素材总数', '已抽检数', '问题数', '异常占比', '状态', '创建时间', '更新时间'];
+    
     const data = filteredBatches.map(batch => ({
-      批次名称: batch.name,
-      道路类型: batch.road_type,
-      采集团队: batch.team_name,
-      道路名称: batch.road_name,
-      素材总数: batch.material_count,
-      已抽检数: batch.inspected_count,
-      问题数: batch.issue_count,
-      异常占比: batch.material_count > 0 ? ((batch.issue_count / batch.material_count) * 100).toFixed(2) + '%' : '0%',
-      状态: STATUS_MAP[batch.status],
-      创建时间: new Date(batch.created_at).toLocaleString('zh-CN'),
-      更新时间: new Date(batch.updated_at).toLocaleString('zh-CN'),
+      '批次名称': batch.name,
+      '道路类型': batch.road_type,
+      '采集团队': batch.team_name,
+      '道路名称': batch.road_name,
+      '素材总数': batch.material_count,
+      '已抽检数': batch.inspected_count,
+      '问题数': batch.issue_count,
+      '异常占比': batch.material_count > 0 ? ((batch.issue_count / batch.material_count) * 100).toFixed(2) + '%' : '0%',
+      '状态': STATUS_MAP[batch.status],
+      '创建时间': new Date(batch.created_at).toLocaleString('zh-CN'),
+      '更新时间': new Date(batch.updated_at).toLocaleString('zh-CN'),
     }));
 
-    const csv = [Object.keys(data[0]).join(','), ...data.map(row => Object.values(row).join(','))].join('\n');
+    const csv = [headers.join(','), ...data.map(row => headers.map(h => `"${(row[h] as string || '').replace(/"/g, '""')}"`).join(','))].join('\n');
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
@@ -119,23 +134,26 @@ export default function Statistics() {
   };
 
   const exportIssueDetails = () => {
+    const headers = ['问题ID', '批次名称', '道路名称', '道路类型', '问题类型', '问题描述', '坐标位置', '采集方向', '素材链接', '状态', '整改说明', '复核意见', '创建时间', '更新时间'];
+    
     const data = filteredIssues.map(issue => ({
-      问题ID: issue.id,
-      批次名称: issue.batch_name,
-      道路名称: issue.road_name,
-      道路类型: issue.road_type,
-      问题类型: ISSUE_TYPE_MAP[issue.type],
-      问题描述: issue.description,
-      坐标位置: issue.latitude ? `${issue.latitude.toFixed(6)}, ${issue.longitude?.toFixed(6)}` : '',
-      采集方向: issue.direction || '',
-      状态: STATUS_MAP[issue.status],
-      整改说明: issue.rectification_note || '',
-      复核意见: issue.review_comment || '',
-      创建时间: new Date(issue.created_at).toLocaleString('zh-CN'),
-      更新时间: new Date(issue.updated_at).toLocaleString('zh-CN'),
+      '问题ID': issue.id,
+      '批次名称': issue.batch_name,
+      '道路名称': issue.road_name,
+      '道路类型': issue.road_type,
+      '问题类型': ISSUE_TYPE_MAP[issue.type],
+      '问题描述': issue.description,
+      '坐标位置': issue.latitude ? `${issue.latitude.toFixed(6)}, ${issue.longitude?.toFixed(6)}` : '',
+      '采集方向': issue.direction || '',
+      '素材链接': issue.material_url ? `=HYPERLINK("${issue.material_url}", "点击预览")` : '',
+      '状态': STATUS_MAP[issue.status],
+      '整改说明': issue.rectification_note || '',
+      '复核意见': issue.review_comment || '',
+      '创建时间': new Date(issue.created_at).toLocaleString('zh-CN'),
+      '更新时间': new Date(issue.updated_at).toLocaleString('zh-CN'),
     }));
 
-    const csv = [Object.keys(data[0]).join(','), ...data.map(row => Object.values(row).join(','))].join('\n');
+    const csv = [headers.join(','), ...data.map(row => headers.map(h => `"${(row[h] as string || '').replace(/"/g, '""')}"`).join(','))].join('\n');
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
@@ -145,6 +163,10 @@ export default function Statistics() {
 
   const maxTeamIssue = Math.max(...statistics.byTeam.map(t => t.issue_count), 1);
   const maxRoadIssue = Math.max(...statistics.byRoadType.map(r => r.issue_count), 1);
+
+  const hasFilters = selectedBatchId !== 'all' || selectedTeamId !== 'all' || 
+                    issueStatusFilter !== 'all' || roadTypeFilter !== 'all' ||
+                    startDate || endDate;
 
   return (
     <div className="animate-fadeIn">
@@ -203,11 +225,60 @@ export default function Statistics() {
               ))}
             </select>
           </div>
-          {(selectedBatchId !== 'all' || selectedTeamId !== 'all') && (
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-500">道路类型：</span>
+            <select
+              value={roadTypeFilter}
+              onChange={(e) => setRoadTypeFilter(e.target.value)}
+              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+            >
+              <option value="all">全部类型</option>
+              {roadTypes.map(type => (
+                <option key={type} value={type}>{type}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-500">问题状态：</span>
+            <select
+              value={issueStatusFilter}
+              onChange={(e) => setIssueStatusFilter(e.target.value)}
+              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+            >
+              <option value="all">全部状态</option>
+              <option value="pending">待处理</option>
+              <option value="reviewing">复核中</option>
+              <option value="resolved">已解决</option>
+              <option value="rejected">已退回</option>
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-gray-400" />
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+              placeholder="开始日期"
+            />
+            <span className="text-gray-400">至</span>
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+              placeholder="结束日期"
+            />
+          </div>
+          {hasFilters && (
             <button
               onClick={() => {
                 setSelectedBatchId('all');
                 setSelectedTeamId('all');
+                setIssueStatusFilter('all');
+                setRoadTypeFilter('all');
+                setStartDate('');
+                setEndDate('');
               }}
               className="px-4 py-2 text-sm text-primary-600 hover:text-primary-700"
             >
@@ -274,29 +345,30 @@ export default function Statistics() {
           </div>
           <div className="p-4">
             <div className="space-y-4">
-              {statistics.byTeam.map((team) => (
-                <div key={team.team_name}>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-gray-700">{team.team_name}</span>
-                    <span className="text-sm text-gray-500">{team.issue_count} 个问题</span>
-                  </div>
-                  <div className="w-full h-3 bg-gray-200 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-primary-500 rounded-full transition-all duration-500"
-                      style={{ width: `${(team.issue_count / maxTeamIssue) * 100}%` }}
-                    />
-                  </div>
-                  <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
-                    <span>批次: {team.total_batches}</span>
-                    <span>素材: {team.total_materials}</span>
-                    <span>通过率: {team.pass_rate.toFixed(1)}%</span>
-                  </div>
-                </div>
-              ))}
-              {statistics.byTeam.length === 0 && (
+              {statistics.byTeam.length === 0 ? (
                 <div className="text-center py-8">
                   <p className="text-gray-500">暂无数据</p>
                 </div>
+              ) : (
+                statistics.byTeam.map((team) => (
+                  <div key={team.team_name}>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium text-gray-700">{team.team_name}</span>
+                      <span className="text-sm text-gray-500">{team.issue_count} 个问题</span>
+                    </div>
+                    <div className="w-full h-3 bg-gray-200 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-primary-500 rounded-full transition-all duration-500"
+                        style={{ width: `${(team.issue_count / maxTeamIssue) * 100}%` }}
+                      />
+                    </div>
+                    <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
+                      <span>批次: {team.total_batches}</span>
+                      <span>素材: {team.total_materials}</span>
+                      <span>通过率: {team.pass_rate.toFixed(1)}%</span>
+                    </div>
+                  </div>
+                ))
               )}
             </div>
           </div>
@@ -308,27 +380,28 @@ export default function Statistics() {
           </div>
           <div className="p-4">
             <div className="space-y-4">
-              {statistics.byRoadType.map((road) => (
-                <div key={road.road_type}>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-gray-700">{road.road_type}</span>
-                    <span className="text-sm text-gray-500">{road.issue_count} 个问题</span>
-                  </div>
-                  <div className="w-full h-3 bg-gray-200 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-success-500 rounded-full transition-all duration-500"
-                      style={{ width: `${(road.issue_count / maxRoadIssue) * 100}%` }}
-                    />
-                  </div>
-                  <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
-                    <span>批次: {road.total_batches}</span>
-                  </div>
-                </div>
-              ))}
-              {statistics.byRoadType.length === 0 && (
+              {statistics.byRoadType.length === 0 ? (
                 <div className="text-center py-8">
                   <p className="text-gray-500">暂无数据</p>
                 </div>
+              ) : (
+                statistics.byRoadType.map((road) => (
+                  <div key={road.road_type}>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium text-gray-700">{road.road_type}</span>
+                      <span className="text-sm text-gray-500">{road.issue_count} 个问题</span>
+                    </div>
+                    <div className="w-full h-3 bg-gray-200 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-success-500 rounded-full transition-all duration-500"
+                        style={{ width: `${(road.issue_count / maxRoadIssue) * 100}%` }}
+                      />
+                    </div>
+                    <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
+                      <span>批次: {road.total_batches}</span>
+                    </div>
+                  </div>
+                ))
               )}
             </div>
           </div>
@@ -339,23 +412,24 @@ export default function Statistics() {
             <h3 className="font-semibold text-gray-800">按问题类别统计</h3>
           </div>
           <div className="p-4">
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-              {statistics.byIssueType.map((issue) => (
-                <div
-                  key={issue.issue_type}
-                  className="bg-gray-50 rounded-lg p-4 text-center"
-                >
-                  <div className="text-3xl font-bold text-primary-600">{issue.count}</div>
-                  <div className="text-sm text-gray-600 mt-1">{ISSUE_TYPE_MAP[issue.issue_type as keyof typeof ISSUE_TYPE_MAP]}</div>
-                  <div className="text-xs text-gray-400 mt-1">{issue.percentage.toFixed(1)}%</div>
-                </div>
-              ))}
-              {statistics.byIssueType.length === 0 && (
-                <div className="col-span-full text-center py-8">
-                  <p className="text-gray-500">暂无数据</p>
-                </div>
-              )}
-            </div>
+            {statistics.byIssueType.length === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-gray-500">暂无数据</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                {statistics.byIssueType.map((issue) => (
+                  <div
+                    key={issue.issue_type}
+                    className="bg-gray-50 rounded-lg p-4 text-center"
+                  >
+                    <div className="text-3xl font-bold text-primary-600">{issue.count}</div>
+                    <div className="text-sm text-gray-600 mt-1">{ISSUE_TYPE_MAP[issue.issue_type as keyof typeof ISSUE_TYPE_MAP]}</div>
+                    <div className="text-xs text-gray-400 mt-1">{issue.percentage.toFixed(1)}%</div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>

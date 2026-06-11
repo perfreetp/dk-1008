@@ -26,6 +26,14 @@ export interface Material {
   status: 'pending' | 'passed' | 'issue';
 }
 
+export interface FlowRecord {
+  id: string;
+  action: 'registered' | 'rectification_submitted' | 'review_passed' | 'review_rejected';
+  comment?: string;
+  operator?: string;
+  created_at: string;
+}
+
 export interface Issue {
   id: string;
   batch_id: string;
@@ -45,6 +53,7 @@ export interface Issue {
   longitude?: number;
   direction?: string;
   rectification_note?: string;
+  flow_records: FlowRecord[];
 }
 
 export interface Review {

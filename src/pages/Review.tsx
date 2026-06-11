@@ -1,7 +1,14 @@
 import { useState } from 'react';
 import { useAppStore } from '../store';
-import { Issue, ISSUE_TYPE_MAP, STATUS_MAP } from '../types';
-import { CheckCircle, XCircle, MessageSquare, AlertCircle, Eye } from 'lucide-react';
+import { Issue, ISSUE_TYPE_MAP, STATUS_MAP, FlowRecord } from '../types';
+import { CheckCircle, XCircle, MessageSquare, AlertCircle, Eye, MapPin, Navigation, User, Calendar, FileText, Send } from 'lucide-react';
+
+const ACTION_MAP: Record<FlowRecord['action'], string> = {
+  registered: '问题登记',
+  rectification_submitted: '提交整改',
+  review_passed: '复核通过',
+  review_rejected: '复核退回',
+};
 
 export default function Review() {
   const issues = useAppStore(state => state.issues);
@@ -39,6 +46,8 @@ export default function Review() {
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
     });
   };
 
@@ -126,11 +135,19 @@ export default function Review() {
                     <p className="mt-2 text-gray-800 font-medium">{issue.description}</p>
                     <div className="flex items-center gap-4 mt-2 text-sm text-gray-500">
                       <span>{issue.batch_name}</span>
+                      <span>{issue.road_name}</span>
                       <span>{formatDate(issue.created_at)}</span>
                     </div>
                   </div>
                   <Eye className="w-5 h-5 text-gray-400" />
                 </div>
+                {issue.rectification_note && (
+                  <div className="mt-3 p-3 bg-primary-50 rounded-lg border border-primary-200">
+                    <p className="text-sm text-primary-700">
+                      <span className="font-medium">整改说明：</span>{issue.rectification_note}
+                    </p>
+                  </div>
+                )}
               </div>
             ))
           )}
@@ -161,7 +178,7 @@ export default function Review() {
                 </button>
               </div>
             </div>
-            <div className="p-6">
+            <div className="p-6 space-y-6">
               <div className="grid grid-cols-2 gap-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">问题素材</label>
@@ -188,19 +205,80 @@ export default function Review() {
                 </div>
               </div>
               
-              <div className="mt-6">
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">问题描述</label>
                 <p className="text-gray-800 bg-gray-50 p-4 rounded-lg">{selectedIssue.description}</p>
               </div>
 
-              <div className="mt-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">整改说明</label>
-                <p className="text-gray-800 bg-success-50 p-4 rounded-lg border border-success-200">
-                  已根据问题描述进行整改，重新采集了相关素材，问题已修复。
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <label className="block text-xs text-gray-500 mb-1">所属批次</label>
+                  <p className="text-sm font-medium text-gray-800">{selectedIssue.batch_name}</p>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <label className="block text-xs text-gray-500 mb-1">道路名称</label>
+                  <p className="text-sm font-medium text-gray-800">{selectedIssue.road_name}</p>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <label className="block text-xs text-gray-500 mb-1">道路类型</label>
+                  <p className="text-sm font-medium text-gray-800">{selectedIssue.road_type}</p>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <label className="block text-xs text-gray-500 mb-1">采集方向</label>
+                  <p className="text-sm font-medium text-gray-800 flex items-center gap-1">
+                    <Navigation className="w-3 h-3" />
+                    {selectedIssue.direction}
+                  </p>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">坐标位置</label>
+                <p className="text-gray-800 flex items-center gap-2">
+                  <MapPin className="w-4 h-4" />
+                  {selectedIssue.latitude?.toFixed(6)}, {selectedIssue.longitude?.toFixed(6)}
                 </p>
               </div>
 
-              <div className="mt-6">
+              <div className="bg-primary-50 rounded-lg p-4 border border-primary-200">
+                <label className="block text-sm font-medium text-primary-700 mb-2">整改说明</label>
+                <p className="text-primary-800">
+                  {selectedIssue.rectification_note || '暂无整改说明'}
+                </p>
+              </div>
+
+              {selectedIssue.flow_records && selectedIssue.flow_records.length > 0 && (
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <h4 className="font-medium text-gray-800 mb-4 flex items-center gap-2">
+                    <Calendar className="w-4 h-4" />
+                    流转记录
+                  </h4>
+                  <div className="space-y-2">
+                    {selectedIssue.flow_records.map((record) => (
+                      <div key={record.id} className="flex items-center gap-3 text-sm">
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                          record.action === 'registered' ? 'bg-blue-100 text-blue-600' :
+                          record.action === 'rectification_submitted' ? 'bg-green-100 text-green-600' :
+                          record.action === 'review_passed' ? 'bg-success-100 text-success-600' :
+                          'bg-danger-100 text-danger-600'
+                        }`}>
+                          {ACTION_MAP[record.action]}
+                        </span>
+                        <span className="text-gray-600">{record.comment}</span>
+                        <span className="text-gray-400 text-xs">{formatDate(record.created_at)}</span>
+                        {record.operator && (
+                          <span className="text-gray-400 text-xs flex items-center gap-1">
+                            <User className="w-3 h-3" />
+                            {record.operator}
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="bg-gray-50 rounded-lg p-4">
                 <label className="block text-sm font-medium text-gray-700 mb-2">复核意见</label>
                 <textarea
                   value={reviewComment}
