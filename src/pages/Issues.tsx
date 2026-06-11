@@ -86,9 +86,24 @@ export default function Issues() {
       submitRectification(selectedIssue.id, rectificationNote);
       setShowRectificationForm(false);
       setRectificationNote('');
+      
       const updatedIssue = issues.find(i => i.id === selectedIssue.id);
       if (updatedIssue) {
-        setSelectedIssue(updatedIssue);
+        setSelectedIssue({
+          ...updatedIssue,
+          status: 'reviewing',
+          rectification_note: rectificationNote,
+          flow_records: [
+            ...(updatedIssue.flow_records || []),
+            {
+              id: Date.now().toString(),
+              action: 'rectification_submitted',
+              operator: '当前用户',
+              comment: rectificationNote,
+              created_at: new Date().toISOString(),
+            },
+          ],
+        });
       } else {
         setSelectedIssue(null);
       }

@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useAppStore } from '../store';
-import { ISSUE_TYPE_MAP, STATUS_MAP } from '../types';
-import { Download, BarChart3, PieChart, TrendingUp, FileText, Filter, Calendar, Map, Eye } from 'lucide-react';
+import { ISSUE_TYPE_MAP, STATUS_MAP, Issue } from '../types';
+import { Download, BarChart3, PieChart, TrendingUp, FileText, Filter, Calendar, Map, Eye, X, ExternalLink, MapPin, Navigation } from 'lucide-react';
 
 export default function Statistics() {
   const batches = useAppStore(state => state.batches);
@@ -45,8 +45,16 @@ export default function Statistics() {
       if (selectedTeamId !== 'all' && batch.team_id !== selectedTeamId) return false;
       if (roadTypeFilter !== 'all' && batch.road_type !== roadTypeFilter) return false;
       if (issueStatusFilter !== 'all' && issue.status !== issueStatusFilter) return false;
-      if (startDate && new Date(issue.created_at) < new Date(startDate)) return false;
-      if (endDate && new Date(issue.created_at) > new Date(endDate)) return false;
+      if (startDate) {
+        const start = new Date(startDate);
+        start.setHours(0, 0, 0, 0);
+        if (new Date(issue.created_at) < start) return false;
+      }
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        if (new Date(issue.created_at) > end) return false;
+      }
       return true;
     });
   }, [issues, batches, selectedBatchId, selectedTeamId, roadTypeFilter, issueStatusFilter, startDate, endDate]);
@@ -167,6 +175,40 @@ export default function Statistics() {
   const hasFilters = selectedBatchId !== 'all' || selectedTeamId !== 'all' || 
                     issueStatusFilter !== 'all' || roadTypeFilter !== 'all' ||
                     startDate || endDate;
+
+  const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null);
+
+  const formatDate = (dateStr: string) => {
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('zh-CN', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'pending': return 'bg-gray-100 text-gray-600';
+      case 'reviewing': return 'bg-primary-100 text-primary-600';
+      case 'resolved': return 'bg-success-100 text-success-600';
+      case 'rejected': return 'bg-danger-100 text-danger-600';
+      default: return 'bg-gray-100 text-gray-600';
+    }
+  };
+
+  const getIssueTypeColor = (type: string) => {
+    switch (type) {
+      case 'blur': return 'bg-purple-100 text-purple-600';
+      case 'occlusion': return 'bg-orange-100 text-orange-600';
+      case 'duplicate': return 'bg-blue-100 text-blue-600';
+      case 'mileage_error': return 'bg-red-100 text-red-600';
+      case 'tag_deviation': return 'bg-green-100 text-green-600';
+      default: return 'bg-gray-100 text-gray-600';
+    }
+  };
 
   return (
     <div className="animate-fadeIn">
@@ -433,6 +475,181 @@ export default function Statistics() {
           </div>
         </div>
       </div>
+
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 mt-6">
+        <div className="p-4 border-b border-gray-100">
+          <h3 className="font-semibold text-gray-800 flex items-center gap-2">
+            <FileText className="w-5 h-5" />
+            问题明细表
+            <span className="text-sm font-normal text-gray-500">({filteredIssues.length}条记录)</span>
+          </h3>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="bg-gray-50">
+                <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">批次名称</th>
+                <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">道路名称</th>
+                <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">道路类型</th>
+                <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">问题类型</th>
+                <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">状态</th>
+                <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">创建时间</th>
+                <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">操作</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {filteredIssues.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-4 py-12 text-center">
+                    <p className="text-gray-500">暂无符合条件的问题记录</p>
+                  </td>
+                </tr>
+              ) : (
+                filteredIssues.map((issue) => (
+                  <tr
+                    key={issue.id}
+                    className="hover:bg-gray-50 transition-colors cursor-pointer"
+                    onClick={() => setSelectedIssue(issue)}
+                  >
+                    <td className="px-4 py-3 text-sm text-gray-800">{issue.batch_name}</td>
+                    <td className="px-4 py-3 text-sm text-gray-800">{issue.road_name}</td>
+                    <td className="px-4 py-3 text-sm text-gray-800">{issue.road_type}</td>
+                    <td className="px-4 py-3">
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getIssueTypeColor(issue.type)}`}>
+                        {ISSUE_TYPE_MAP[issue.type]}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(issue.status)}`}>
+                        {STATUS_MAP[issue.status]}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-500">{formatDate(issue.created_at)}</td>
+                    <td className="px-4 py-3">
+                      <button className="flex items-center gap-1 text-primary-600 hover:text-primary-700">
+                        <Eye className="w-4 h-4" />
+                        <span className="text-sm">详情</span>
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {selectedIssue && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-3xl mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-gray-100">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-800">问题详情</h3>
+                  <div className="flex items-center gap-2 mt-2">
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${getIssueTypeColor(selectedIssue.type)}`}>
+                      {ISSUE_TYPE_MAP[selectedIssue.type]}
+                    </span>
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(selectedIssue.status)}`}>
+                      {STATUS_MAP[selectedIssue.status]}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setSelectedIssue(null)}
+                  className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center"
+                >
+                  <X className="w-5 h-5 text-gray-500" />
+                </button>
+              </div>
+            </div>
+            <div className="p-6 space-y-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">问题描述</label>
+                <p className="text-gray-800 bg-gray-50 p-4 rounded-lg">{selectedIssue.description}</p>
+              </div>
+              
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <label className="block text-xs text-gray-500 mb-1">所属批次</label>
+                  <p className="text-sm font-medium text-gray-800">{selectedIssue.batch_name}</p>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <label className="block text-xs text-gray-500 mb-1">道路名称</label>
+                  <p className="text-sm font-medium text-gray-800">{selectedIssue.road_name}</p>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <label className="block text-xs text-gray-500 mb-1">道路类型</label>
+                  <p className="text-sm font-medium text-gray-800">{selectedIssue.road_type}</p>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <label className="block text-xs text-gray-500 mb-1">采集方向</label>
+                  <p className="text-sm font-medium text-gray-800 flex items-center gap-1">
+                    <Navigation className="w-3 h-3" />
+                    {selectedIssue.direction}
+                  </p>
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">坐标位置</label>
+                <p className="text-gray-800 flex items-center gap-2">
+                  <MapPin className="w-4 h-4" />
+                  {selectedIssue.latitude?.toFixed(6)}, {selectedIssue.longitude?.toFixed(6)}
+                </p>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">素材预览</label>
+                <div className="bg-gray-900 rounded-lg overflow-hidden">
+                  <img
+                    src={selectedIssue.material_url}
+                    alt="问题素材"
+                    className="w-full h-64 object-contain"
+                  />
+                </div>
+              </div>
+              
+              {selectedIssue.rectification_note && (
+                <div className="bg-primary-50 rounded-lg p-4 border border-primary-200">
+                  <label className="block text-sm font-medium text-primary-700 mb-2">整改说明</label>
+                  <p className="text-primary-800">{selectedIssue.rectification_note}</p>
+                </div>
+              )}
+              
+              {selectedIssue.review_comment && (
+                <div className={`rounded-lg p-4 border ${selectedIssue.status === 'resolved' ? 'bg-success-50 border-success-200' : 'bg-danger-50 border-danger-200'}`}>
+                  <label className={`block text-sm font-medium mb-2 ${selectedIssue.status === 'resolved' ? 'text-success-700' : 'text-danger-700'}`}>
+                    {selectedIssue.status === 'resolved' ? '复核通过意见' : '复核退回意见'}
+                  </label>
+                  <p className={`${selectedIssue.status === 'resolved' ? 'text-success-800' : 'text-danger-800'}`}>
+                    {selectedIssue.review_comment}
+                  </p>
+                </div>
+              )}
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">创建时间</label>
+                  <p className="text-gray-800">{formatDate(selectedIssue.created_at)}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">更新时间</label>
+                  <p className="text-gray-800">{formatDate(selectedIssue.updated_at)}</p>
+                </div>
+              </div>
+            </div>
+            <div className="p-6 border-t border-gray-100">
+              <button
+                onClick={() => setSelectedIssue(null)}
+                className="w-full px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+              >
+                关闭
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

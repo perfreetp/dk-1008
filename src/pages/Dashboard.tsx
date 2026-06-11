@@ -73,22 +73,58 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
 
   const getRoadSections = (batchId: string) => {
     const batchMaterials = getBatchMaterials(batchId);
-    const sections: Record<string, { materials: typeof batchMaterials; issues: Issue[] }> = {};
+    const batchIssues = getBatchIssues(batchId);
     
-    batchMaterials.forEach(material => {
-      const sectionKey = material.direction || '未知方向';
-      if (!sections[sectionKey]) {
-        sections[sectionKey] = { materials: [], issues: [] };
-      }
-      sections[sectionKey].materials.push(material);
+    const sortedMaterials = [...batchMaterials].sort((a, b) => {
+      const orderA = parseInt(a.url.replace(/[^0-9]/g, '')) || 0;
+      const orderB = parseInt(b.url.replace(/[^0-9]/g, '')) || 0;
+      return orderA - orderB;
     });
 
-    const batchIssues = getBatchIssues(batchId);
+    const sections: Record<string, { materials: typeof batchMaterials; issues: Issue[]; issueTypeDistribution: Record<string, number> }> = {};
+    
+    const batchSize = 5;
+    for (let i = 0; i < sortedMaterials.length; i += batchSize) {
+      const batch = sortedMaterials.slice(i, i + batchSize);
+      const startNum = parseInt(batch[0]?.url.replace(/[^0-9]/g, '')) || (i + 1);
+      const endNum = parseInt(batch[batch.length - 1]?.url.replace(/[^0-9]/g, '')) || (i + batch.length);
+      const direction = batch[0]?.direction || '未知方向';
+      const sectionKey = `${direction} 第${startNum}-${endNum}段`;
+      
+      sections[sectionKey] = {
+        materials: batch,
+        issues: [],
+        issueTypeDistribution: {},
+      };
+    }
+
+    if (sortedMaterials.length === 0) {
+      sections['未知路段'] = {
+        materials: [],
+        issues: [],
+        issueTypeDistribution: {},
+      };
+    }
+
     batchIssues.forEach(issue => {
       const material = batchMaterials.find(m => m.id === issue.material_id);
-      const sectionKey = material?.direction || '未知方向';
-      if (sections[sectionKey]) {
-        sections[sectionKey].issues.push(issue);
+      if (material) {
+        const materialOrder = parseInt(material.url.replace(/[^0-9]/g, '')) || 0;
+        const sectionIndex = Math.floor((materialOrder - 1) / batchSize);
+        const allSectionKeys = Object.keys(sections);
+        
+        if (allSectionKeys[sectionIndex]) {
+          sections[allSectionKeys[sectionIndex]].issues.push(issue);
+          const type = issue.type;
+          sections[allSectionKeys[sectionIndex]].issueTypeDistribution[type] = 
+            (sections[allSectionKeys[sectionIndex]].issueTypeDistribution[type] || 0) + 1;
+        }
+      }
+    });
+
+    Object.keys(sections).forEach(key => {
+      if (sections[key].issues.length === 0) {
+        sections[key].issueTypeDistribution = {};
       }
     });
 
@@ -448,7 +484,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
                         >
                           <div className="flex items-center gap-3">
                             <Navigation className="w-5 h-5 text-gray-500" />
-                            <span className="font-medium text-gray-800">{section}路段</span>
+                            <span className="font-medium text-gray-800">{section}</span>
                             <span className="text-sm text-gray-500">
                               ({data.materials.length}个素材, {issueCount}个问题)
                             </span>
@@ -474,6 +510,27 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
                         </button>
                         {isExpanded && (
                           <div className="px-4 pb-4">
+                            {issueCount > 0 && Object.keys(data.issueTypeDistribution).length > 0 && (
+                              <div className="border-t border-gray-100 pt-4">
+                                <p className="text-sm font-medium text-gray-700 mb-3">问题类型分布</p>
+                                <div className="flex flex-wrap gap-2">
+                                  {Object.entries(data.issueTypeDistribution).map(([type, count]) => (
+                                    <span
+                                      key={type}
+                                      className={`px-3 py-1 rounded-full text-xs font-medium ${
+                                        type === 'blur' ? 'bg-purple-100 text-purple-600' :
+                                        type === 'occlusion' ? 'bg-orange-100 text-orange-600' :
+                                        type === 'duplicate' ? 'bg-blue-100 text-blue-600' :
+                                        type === 'mileage_error' ? 'bg-red-100 text-red-600' :
+                                        'bg-green-100 text-green-600'
+                                      }`}
+                                    >
+                                      {ISSUE_TYPE_MAP[type as keyof typeof ISSUE_TYPE_MAP]}: {count} ({((count / issueCount) * 100).toFixed(0)}%)
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
                             {recentIssues.length > 0 && (
                               <div className="border-t border-gray-100 pt-4">
                                 <p className="text-sm font-medium text-gray-700 mb-3">最近异常（{recentIssues.length}条）</p>
@@ -512,7 +569,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
                                 </div>
                               </div>
                             )}
-                            {recentIssues.length === 0 && (
+                            {issueCount === 0 && (
                               <div className="border-t border-gray-100 pt-4 text-center">
                                 <CheckCircle className="w-8 h-8 text-success-400 mx-auto mb-2" />
                                 <p className="text-sm text-gray-500">该路段暂无问题</p>
